@@ -58,18 +58,15 @@ void ACOAAvatar::MoveRight(float Amount)
 void ACOAAvatar::RunPressed()
 {
 
-	GetCharacterMovement()->MaxWalkSpeed = RunningSpeed;
 	bHoldingRunKey = true;
-	//bReleased = false;
 	UpdateMovementParams();
 
 }
 
 void ACOAAvatar::RunReleased()
 {
-	GetCharacterMovement()->MaxWalkSpeed = WalkingSpeed;
+	
 	bHoldingRunKey = false;
-	//bReleased = true;
 	UpdateMovementParams();
 
 }
@@ -83,37 +80,8 @@ void ACOAAvatar::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Update Stamina
-	/*
-	if (GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Walking) {
-
-		if (bHoldingRunKey && !bStaminaDrained) {
-
-			if (GetCharacterMovement()->Velocity.IsNearlyZero(0.01f)) {
-				Stamina = FMath::Max(0.0f, Stamina - StaminaDrainRate * DeltaTime);
-
-				if (Stamina == 0.0f) {
-					bStaminaDrained = true;
-					UpdateMovementParams();
-				}
-			
-			}
-		}
-		else {
-			Stamina = FMath::Min(MaxStamina, Stamina + StaminaGainRate * DeltaTime);
-			if (Stamina >= MaxStamina) {
-				bStaminaDrained = false;
-				UpdateMovementParams();
-			}
-		}
-	}
-	*/
-
-
-	/**/
 	if (Stamina <= 0.0f) {
 		bStaminaDrained = true;
-		//bHoldingRunKey = false;
 		UpdateMovementParams();
 	}
 	else if (Stamina >= MaxStamina) {
@@ -125,43 +93,27 @@ void ACOAAvatar::Tick(float DeltaTime)
 	if (!(GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Walking) && (bStaminaDrained == false)) {
 
 		if (!(GetCharacterMovement()->Velocity.IsZero()) && bHoldingRunKey) { // only decrease if actually running (not when just pressing shift while standing)
-			Stamina = FMath::FInterpConstantTo(Stamina, 0.0f, DeltaTime, StaminaDrainRate);
+			Stamina = FMath::Max(0.0f, Stamina - StaminaDrainRate * DeltaTime);
 		}
 		else {
-			Stamina = FMath::FInterpConstantTo(Stamina, MaxStamina, DeltaTime, StaminaGainRate);
+			Stamina = FMath::Min(MaxStamina, Stamina + StaminaGainRate * DeltaTime);
 		}
 
 	}
 	else {
 		if (!(GetCharacterMovement()->Velocity.IsZero()) && bHoldingRunKey && !bStaminaDrained) { // only decrease if actually running (not when just pressing shift while standing)
-			Stamina = FMath::FInterpConstantTo(Stamina, 0.0f, DeltaTime, StaminaDrainRate);
+			Stamina = FMath::Max(0.0f, Stamina - StaminaDrainRate * DeltaTime);
 		}
 		else {
-			Stamina = FMath::FInterpConstantTo(Stamina, MaxStamina, DeltaTime, StaminaGainRate);
+			Stamina = FMath::Min(MaxStamina, Stamina + StaminaGainRate * DeltaTime);
 		}
 
 	}
-	//UpdateMovementParams();
-	// GEngine->AddOnScreenDebugMessage(0, DeltaTime, FColor::White, FString::FromInt(Stamina));
 	GEngine->AddOnScreenDebugMessage(0, DeltaTime, FColor::White, FString::Printf(TEXT("Stamina: %f"), Stamina));
-	/**/
+	
 }
 
 void ACOAAvatar::UpdateMovementParams()
 {
-
 	GetCharacterMovement()->MaxWalkSpeed = bHoldingRunKey && !bStaminaDrained ? RunningSpeed : WalkingSpeed;
-	/*
-	if (bStaminaDrained) {
-		GetCharacterMovement()->MaxWalkSpeed = WalkingSpeed;
-
-		if (Stamina == MaxStamina) {
-			bStaminaDrained = false;
-
-			if (!bReleased) {
-				RunPressed();
-			}
-		}
-	}*/
-
 }
