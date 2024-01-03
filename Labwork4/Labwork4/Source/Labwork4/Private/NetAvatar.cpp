@@ -4,7 +4,7 @@
 #include "NetAvatar.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
-ANetAvatar::ANetAvatar() : WalkingSpeed(150.0f), RunningSpeed(600.0f), bHoldingRunKey(false)
+ANetAvatar::ANetAvatar() : MovementScale(1.0f), WalkingSpeed(150.0f), RunningSpeed(600.0f), bHoldingRunKey(false)
 {
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(RootComponent);
@@ -38,19 +38,19 @@ void ANetAvatar::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent
 	
 }
 
-void ANetAvatar::MoveForward(float Amount)
+void ANetAvatar::MoveForward(float Scale)
 {
 	FRotator ControlRotation = GetControlRotation();
 	FVector ForwardDirection = FRotationMatrix(FRotator(0.0f, ControlRotation.Yaw, 0.0f)).GetUnitAxis(EAxis::X);
-	AddMovementInput(ForwardDirection, Amount);
+	AddMovementInput(ForwardDirection, MovementScale * Scale);
 
 }
 
-void ANetAvatar::MoveRight(float Amount)
+void ANetAvatar::MoveRight(float Scale)
 {
 	FRotator ControlRotation = GetControlRotation();
 	FVector RightDirection = FRotationMatrix(FRotator(0.0f, ControlRotation.Yaw, 0.0f)).GetUnitAxis(EAxis::Y);
-	AddMovementInput(RightDirection, Amount);
+	AddMovementInput(RightDirection, MovementScale * Scale);
 
 }
 

@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Runtime/Engine/Classes/Engine/DataTable.h"
 #include "Net/UnrealNetwork.h"
+#include "NetGameInstance.h"
 #include "NetBaseCharacter.generated.h"
 
 UENUM(BlueprintType)
@@ -18,7 +19,8 @@ enum class EBodyPart : uint8
 	BP_LEGS = 4,
 	BP_BEARD = 5,
 	BP_EYEBROWS = 6,
-	BP_COUNT = 7,
+	BP_BODYTYPE = 7,
+	BP_COUNT = 8,
 };
 
 USTRUCT(BlueprintType)
@@ -34,33 +36,8 @@ struct FSMeshAssetList : public FTableRowBase
 
 };
 
-USTRUCT(BlueprintType)
-struct FSBodyPartSelection 
-{
-	GENERATED_USTRUCT_BODY()
-
-	UPROPERTY()
-	int Indices[(int)EBodyPart::BP_COUNT];
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool isFemale;
-
-};
-
-USTRUCT(BlueprintType)
-struct FSPlayerInfo
-{
-	GENERATED_USTRUCT_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText Nickname;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FSBodyPartSelection BodyParts;
-
-	bool Ready;
-
-};
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerInfoChanged, ANetBaseCharacter*, Player);
+// since this acts as a delegate, this is now a custom class, so we name it with F
 
 UCLASS()
 class ANetBaseCharacter : public ACharacter
@@ -80,46 +57,63 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
+	UFUNCTION(BlueprintPure)
+	FString GetCustomizationData();
+	void ParseCustomizationData(FString Data);
+
 	UFUNCTION(BlueprintCallable)
 	void ChangeBodyPart(EBodyPart index, int value, bool DirectSet);
 
-	UFUNCTION(BlueprintCallable)
-	void ChangeGender(bool isFemale);
-
-	UPROPERTY(BlueprintReadWrite, ReplicatedUsing = OnRep_PlayerInfoChanged)
-	FSBodyPartSelection PartSelection;
+	//UFUNCTION(BlueprintCallable)
+	//void ChangeGender(bool isFemale);
 
 	UFUNCTION(Server, Reliable)
 	void SubmitPlayerInfoToServer(FSPlayerInfo Info);
 
+	// we make "OnPlayerInfoChanged" a UPROPERTY with BlueprintAssignable and with type FOnPlayerInfoChanged since its now a delegate
+	UPROPERTY(BlueprintAssignable)
+	FOnPlayerInfoChanged OnPlayerInfoChanged;
+
+	//Timer for waiting PlayerState
 	UFUNCTION()
-	void OnRep_PlayerInfoChanged();
+	void CheckPlayerState();
 
-private:
+	UFUNCTION()
+	void CheckPlayerInfo();
 
-	UPROPERTY()
+	bool PlayerInfoReceived;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	USkeletalMeshComponent* PartFace;
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	UStaticMeshComponent* PartHair;
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	UStaticMeshComponent* PartBeard;
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	UStaticMeshComponent* PartEyes;
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	USkeletalMeshComponent* PartHands;
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	USkeletalMeshComponent* PartLegs;
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	UStaticMeshComponent* PartEyebrows;
+
+
+
+private:
 
 	static FSMeshAssetList* GetBodyPartList(EBodyPart part, bool isFemale);
 
 	void UpdateBodyParts();
+
+	int BodyPartIndices[EBodyPart::BP_COUNT];
+
+	FTimerHandle ClientDataCheckTimer;
 
 };

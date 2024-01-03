@@ -4,6 +4,7 @@
 #include "NetBaseCharacter.h"
 #include "Engine/DataTable.h"
 #include "NetGameInstance.h"
+#include "NetPlayerState.h"
 
 static UDataTable* SBodyParts = nullptr;
 
@@ -62,15 +63,9 @@ ANetBaseCharacter::ANetBaseCharacter()
 void ANetBaseCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (IsLocallyControlled())
-	{
-		UNetGameInstance* Instance = Cast<UNetGameInstance>(GWorld->GetGameInstance());
-		if (Instance && Instance->PlayerInfo.Ready) {
-			SubmitPlayerInfoToServer(Instance->PlayerInfo);
-		}
-	}
-	
+	if (GetNetMode() == ENetMode::NM_Standalone) return;
+	SetActorHiddenInGame(true);
+	CheckPlayerState();
 }
 
 void ANetBaseCharacter::OnConstruction(const FTransform& Transform)
@@ -85,12 +80,33 @@ void ANetBaseCharacter::Tick(float DeltaTime)
 
 }
 
+FString ANetBaseCharacter::GetCustomizationData()
+{
+	FString Data;
+	for (size_t i = 0; i < (int)EBodyPart::BP_COUNT; i++) 
+	{
+		Data += FString::FromInt(BodyPartIndices[i]);
+		if (i < ((int)(EBodyPart::BP_COUNT)-1)) Data += TEXT(",");
+	}
+	return Data;
+}
+
+void ANetBaseCharacter::ParseCustomizationData(FString BodyPartData)
+{
+	TArray<FString> ArrayData;
+	BodyPartData.ParseIntoArray(ArrayData, TEXT(","));
+	for (size_t i = 0; i < ArrayData.Num(); i++) 
+	{
+		BodyPartIndices[i] = FCString::Atoi(*ArrayData[i]);
+	}
+}
+
 void ANetBaseCharacter::ChangeBodyPart(EBodyPart index, int value, bool DirectSet)
 {
-	FSMeshAssetList* List = GetBodyPartList(index, PartSelection.isFemale);
+	FSMeshAssetList* List = GetBodyPartList(index, BodyPartIndices[(int)EBodyPart::BP_BODYTYPE] != 0);
 	if (List == nullptr) return;
 
-	int CurrentIndex = PartSelection.Indices[(int)index];
+	int CurrentIndex = BodyPartIndices[(int)index];
 
 	if (DirectSet)
 	{
@@ -107,7 +123,7 @@ void ANetBaseCharacter::ChangeBodyPart(EBodyPart index, int value, bool DirectSe
 	else
 		CurrentIndex %= Num;
 
-	PartSelection.Indices[(int)index] = CurrentIndex;
+	BodyPartIndices[(int)index] = CurrentIndex;
 
 	switch (index)
 	{
@@ -142,32 +158,71 @@ void ANetBaseCharacter::ChangeBodyPart(EBodyPart index, int value, bool DirectSe
 	}
 }
 
+/*
 void ANetBaseCharacter::ChangeGender(bool _isFemale)
 {
 	PartSelection.isFemale = _isFemale;
 	UpdateBodyParts();
 }
+*/
 
-void ANetBaseCharacter::SubmitPlayerInfoToServer_Implementation(FSPlayerInfo Info)
+void ANetBaseCharacter::CheckPlayerState()
 {
-	PartSelection = Info.BodyParts;
+	ANetPlayerState* State = GetPlayerState<ANetPlayerState>();
 
-	if (HasAuthority())
+	if (State == nullptr)
 	{
-		OnRep_PlayerInfoChanged();
+		UE_LOG(LogTemp, Warning, TEXT("State == nullptr"));
+
+		GWorld->GetTimerManager().SetTimer(ClientDataCheckTimer, this, &ANetBaseCharacter::CheckPlayerState, 0.25f, false);
+	}
+	else {
+		if (IsLocallyControlled())
+		{
+			UNetGameInstance* Instance = Cast<UNetGameInstance>(GWorld->GetGameInstance());
+			if (Instance) {
+				SubmitPlayerInfoToServer(Instance->PlayerInfo);
+			}
+		}
+
+		CheckPlayerInfo();
 	}
 }
 
+void ANetBaseCharacter::CheckPlayerInfo()
+{
+	ANetPlayerState* State = GetPlayerState<ANetPlayerState>();
+
+	if (State && PlayerInfoReceived) {
+
+		ParseCustomizationData(State->Data.CustomizationData);
+		UpdateBodyParts();
+		OnPlayerInfoChanged.Broadcast(this); // since we made "OnPlayerInfoChanged" a delegate
+		SetActorHiddenInGame(false);
+	}
+	else {
+		UE_LOG(LogTemp, Warning, TEXT("State Not Received !"));
+
+		GWorld->GetTimerManager().SetTimer(ClientDataCheckTimer, this, &ANetBaseCharacter::CheckPlayerInfo, 0.25f, false);
+	}
+}
+
+void ANetBaseCharacter::SubmitPlayerInfoToServer_Implementation(FSPlayerInfo Info)
+{
+	ANetPlayerState *State = GetPlayerState<ANetPlayerState>();
+	State->Data.Nickname = Info.Nickname;
+	State->Data.CustomizationData = Info.CustomizationData;
+	State->Data.TeamID = State->TeamID;
+	PlayerInfoReceived = true;
+}
+
+/*
 void ANetBaseCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ANetBaseCharacter, PartSelection);
 }
-
-void ANetBaseCharacter::OnRep_PlayerInfoChanged()
-{
-	UpdateBodyParts();
-}
+*/
 
 FSMeshAssetList* ANetBaseCharacter::GetBodyPartList(EBodyPart part, bool isFemale)
 {

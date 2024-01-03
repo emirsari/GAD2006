@@ -29,6 +29,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	UPROPERTY(BlueprintReadWrite)
+	float MovementScale;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float WalkingSpeed;
 
@@ -38,6 +41,7 @@ public:
 	UPROPERTY(VisibleAnywhere, ReplicatedUsing = UpdateMovementParams)
 	bool bHoldingRunKey;
 
+	
 
 
 private:
