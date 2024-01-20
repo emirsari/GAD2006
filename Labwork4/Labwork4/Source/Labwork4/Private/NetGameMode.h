@@ -26,17 +26,13 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void EndGame();
+	
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
+	bool bRedWins;
 
-	// Timer call tracker to count the number of times the function has been called
-	UPROPERTY(BlueprintReadOnly)
-	int CallTracker;
+	UFUNCTION(NetMulticast, Reliable)
+	void CountdownFinished();
 
-	// Timer function for 30 secs win condition
-	UFUNCTION()
-	void TimerFunction();
-
-	// Adding BeginPlay() to start timer when the game begins
-	virtual void BeginPlay() override;
 
 private:
 

@@ -57,5 +57,6 @@ public:
 
 	UPROPERTY(BlueprintReadWrite)
 	FSPlayerInfo PlayerInfo;
+
 	
 };

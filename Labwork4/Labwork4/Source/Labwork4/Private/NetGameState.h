@@ -41,6 +41,30 @@ public:
 	UFUNCTION(BlueprintCallable)
 	ANetPlayerState* GetPlayerStateByIndex(int PlayerIndex);
 
+	UPROPERTY()
+	FTimerHandle TimerHandleForWinCondition; 
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float Countdown; 
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_TimeLeft)
+	float TimeLeft; 
+
+	UFUNCTION(BlueprintCallable)
+	void BeginCountdown();
+
+	UFUNCTION()
+	void UpdateCountdown(); 
+
+	UFUNCTION(BlueprintImplementableEvent)
+	void UpdateCountdownNotification(); 
+
+	UFUNCTION(NetMulticast, Reliable)
+	void EndCountdown(); 
+
+	UFUNCTION()
+	void OnRep_TimeLeft();
+
 };
 
 

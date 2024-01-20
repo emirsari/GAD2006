@@ -9,7 +9,7 @@
 #include "GameFramework/PlayerStart.h"
 #include "Components/CapsuleComponent.h"
 
-ANetGameMode::ANetGameMode() : CallTracker(1)
+ANetGameMode::ANetGameMode()
 {
 	
 	DefaultPawnClass = ANetBaseCharacter::StaticClass();
@@ -25,42 +25,78 @@ AActor* ANetGameMode::ChoosePlayerStart_Implementation(AController* Player)
 
 void ANetGameMode::AvatarsOverlapped(ANetAvatar* AvatarA, ANetAvatar* AvatarB)
 {
+
 	ANetGameState* GState = GetGameState<ANetGameState>();
-
-	if (GState == nullptr || GState->WinningPlayer >= 0) return;
-
-	ANetPlayerState* StateA = AvatarA->GetPlayerState<ANetPlayerState>();
-	ANetPlayerState* StateB = AvatarB->GetPlayerState<ANetPlayerState>();
-
-	if (StateA->TeamID == StateB->TeamID) return;
-
-
-	if (StateA->TeamID == EPlayerTeam::TEAM_Red) {
-		GState->WinningPlayer = StateA->PlayerIndex;
-	}
-	else {
-		GState->WinningPlayer = StateB->PlayerIndex;
-	}
-	
-	AvatarA->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	AvatarB->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-
-	GState->OnVictory.Broadcast();
-
-	for (APlayerController* Player : AllPlayers)
+	if (GState->TimeLeft > 0)
 	{
-		auto State = Player->GetPlayerState<ANetPlayerState>();
+		bRedWins = true; // if there is still time remaining when avatars are overlapped, we know that red won
 
-		if (State->TeamID == EPlayerTeam::TEAM_Blue) {
-			State->Result = EGameResults::RESULT_Lost;
+		if (GState == nullptr || GState->WinningPlayer >= 0) return;
+
+		GState->EndCountdown(); // ends countdown when a player wins
+
+		ANetPlayerState* StateA = AvatarA->GetPlayerState<ANetPlayerState>();
+		ANetPlayerState* StateB = AvatarB->GetPlayerState<ANetPlayerState>();
+
+		if (StateA->TeamID == StateB->TeamID) return;
+
+		if (bRedWins) {
+			if (StateA->TeamID == EPlayerTeam::TEAM_Red) {
+				GState->WinningPlayer = StateA->PlayerIndex;
+			}
+			else {
+				GState->WinningPlayer = StateB->PlayerIndex;
+			}
+
+			AvatarA->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+			AvatarB->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+			GState->OnVictory.Broadcast();
+
+			for (APlayerController* Player : AllPlayers)
+			{
+				auto State = Player->GetPlayerState<ANetPlayerState>();
+
+				if (State->TeamID == EPlayerTeam::TEAM_Blue) {
+					State->Result = EGameResults::RESULT_Lost;
+				}
+				else {
+					State->Result = EGameResults::RESULT_Won;
+				}
+			}
 		}
 		else {
-			State->Result = EGameResults::RESULT_Won;
-		}
-	}
+			if (StateA->TeamID == EPlayerTeam::TEAM_Blue)
+			{
+				GState->WinningPlayer = StateA->PlayerIndex;
+			}
+			else
+			{
+				GState->WinningPlayer = StateB->PlayerIndex;
+			}
 
-	FTimerHandle EndGameTimerHandle;
-	GWorld->GetTimerManager().SetTimer(EndGameTimerHandle, this, &ANetGameMode::EndGame, 2.5f, false);
+			for (APlayerController* Player : AllPlayers)
+			{
+				auto State = Player->GetPlayerState<ANetPlayerState>();
+
+				if (State)
+				{
+					if (State->TeamID == EPlayerTeam::TEAM_Red)
+					{
+						State->Result = EGameResults::RESULT_Lost;
+					}
+					else
+					{
+						State->Result = EGameResults::RESULT_Won;
+					}
+				}
+			}
+		}
+
+		GState->OnVictory.Broadcast();
+		FTimerHandle EndGameTimerHandle;
+		GWorld->GetTimerManager().SetTimer(EndGameTimerHandle, this, &ANetGameMode::EndGame, 2.5f, false);
+	}
 
 }
 
@@ -83,25 +119,6 @@ void ANetGameMode::EndGame()
 	GState->TriggerRestart();
 }
 
-void ANetGameMode::TimerFunction()
-{
-	CallTracker--;
-
-	// Blue team wins if the time (30 secs) runs out 
-	if (CallTracker == 0) 
-	{
-		GetGameState<ANetGameState>()->WinningPlayer = 0; // Blue team player
-		GetGameState<ANetGameState>()->OnVictory.Broadcast();
-	}
-	
-}
-
-void ANetGameMode::BeginPlay()
-{
-	// Setting a timer (30 secs) when the game starts
-	FTimerHandle TimerHandle;
-	GWorld->GetTimerManager().SetTimer(TimerHandle, this, &ANetGameMode::TimerFunction, 30.f, false, 0.f); 
-}
 
 AActor* ANetGameMode::GetPlayerStart(FString Name, int Index)
 {
@@ -129,7 +146,6 @@ AActor* ANetGameMode::AssignTeamAndPlayerStart(AController* Player)
 {
 	AActor* Start = nullptr;
 	ANetPlayerState* State = Player->GetPlayerState<ANetPlayerState>();
-
 	if (State)
 	{
 		if (TotalGames == 0)
@@ -149,7 +165,82 @@ AActor* ANetGameMode::AssignTeamAndPlayerStart(AController* Player)
 		else {
 			Start = GetPlayerStart("Red", PlayerStartIndex++);
 		}
-	}
 
+	}
 	return Start;
 }
+
+void ANetGameMode::CountdownFinished_Implementation()
+{
+	ANetAvatar* AvatarA = nullptr;
+	ANetAvatar* AvatarB = nullptr;
+
+	for (APlayerController* Player : AllPlayers)
+	{
+		auto State = Player->GetPlayerState<ANetPlayerState>();
+
+		if (State)
+		{
+			ANetAvatar* Avatar = Cast<ANetAvatar>(Player->GetPawn());
+			if (Avatar)
+			{
+				if (State->TeamID == EPlayerTeam::TEAM_Red)
+				{
+					AvatarB = Avatar;
+				}
+				else
+				{
+					AvatarA = Avatar;
+				}
+			}
+		}
+	}
+
+	if (AvatarA && AvatarB)
+	{
+		ANetGameState* GState = GetGameState<ANetGameState>();
+
+		bRedWins = false; // if there is still time remaining when avatars are overlapped, we know that red won
+
+		if (GState == nullptr || GState->WinningPlayer >= 0) return;
+
+		GState->EndCountdown(); // ends countdown when a player wins
+		GEngine->AddOnScreenDebugMessage(0, 2.5f, FColor::Green, FString::Printf(TEXT("BLUE WINS !!!")));
+
+		ANetPlayerState* StateA = AvatarA->GetPlayerState<ANetPlayerState>();
+		ANetPlayerState* StateB = AvatarB->GetPlayerState<ANetPlayerState>();
+
+		if (StateA->TeamID == StateB->TeamID) return;
+
+		
+		if (StateA->TeamID == EPlayerTeam::TEAM_Blue)
+		{
+				GState->WinningPlayer = StateA->PlayerIndex;
+		}
+		else
+		{
+				GState->WinningPlayer = StateB->PlayerIndex;
+		}
+
+		for (APlayerController* Player : AllPlayers)
+		{
+			auto State = Player->GetPlayerState<ANetPlayerState>();
+
+			if (State)
+			{
+				if (State->TeamID == EPlayerTeam::TEAM_Red)
+				{
+						State->Result = EGameResults::RESULT_Lost;
+				}
+				else
+				{
+						State->Result = EGameResults::RESULT_Won;
+				}
+			}
+		}
+		GState->OnVictory.Broadcast();
+		FTimerHandle EndGameTimerHandle;
+		GWorld->GetTimerManager().SetTimer(EndGameTimerHandle, this, &ANetGameMode::EndGame, 2.5f, false);
+	}
+}
+
